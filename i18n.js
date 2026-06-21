@@ -10,7 +10,7 @@ const I18N = {
   el: {
     brand_sub:'Μηνύματα προσωπικού με ρόλους',
     settings_title:'Ρυθμίσεις',
-    role_admin_default:'Διαχειριστής',
+    role_admin_default:'Διαχειριστής', default_role:'Υπάλληλος',
     tab_chats:'Συνομιλίες', tab_staff:'Προσωπικό', tab_files:'Αρχεία',
     search_ph:'Αναζήτηση ονόματος ή ομάδας',
     active_convos:'Ενεργές συνομιλίες', btn_new_group:'+ Ομάδα',
@@ -111,7 +111,7 @@ const I18N = {
   en: {
     brand_sub:'Staff messenger with roles',
     settings_title:'Settings',
-    role_admin_default:'Administrator',
+    role_admin_default:'Administrator', default_role:'Staff',
     tab_chats:'Chats', tab_staff:'Staff', tab_files:'Files',
     search_ph:'Search a name or group',
     active_convos:'Active conversations', btn_new_group:'+ Group',
@@ -208,7 +208,7 @@ const I18N = {
   sq: {
     brand_sub:'Mesazhe stafi me role',
     settings_title:'Cilësimet',
-    role_admin_default:'Administrator',
+    role_admin_default:'Administrator', default_role:'Punonjës',
     tab_chats:'Bisedat', tab_staff:'Personeli', tab_files:'Skedarët',
     search_ph:'Kërko një emër ose grup',
     active_convos:'Bisedat aktive', btn_new_group:'+ Grup',

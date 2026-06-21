@@ -92,6 +92,9 @@ button{cursor:pointer}
 .sound-toggle.active-sound{background:linear-gradient(135deg,rgba(255,62,165,.30),rgba(255,23,68,.24));border-color:rgba(255,117,199,.62);box-shadow:0 0 22px rgba(255,62,165,.16)}
 .empty-state{padding:16px;color:var(--muted);text-align:center;border:1px dashed rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.035)}
 
+/* chat-list items are <button>s — without this their text defaults to black */
+.chat-item{color:var(--text)}
+
 /* language switcher */
 .brandbar-copy{flex:1;min-width:0}
 .lang-switch{display:flex;gap:4px;flex:0 0 auto}
@@ -138,3 +141,27 @@ button.cr-row:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
 /* V4 private roles additions — keeps the same dark/pink/red design */
 .scope-line{font-size:11px;color:#b994aa;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tag{font-size:11px;color:#ffc8e4;border:1px solid rgba(255,117,199,.28);background:rgba(255,62,165,.10);padding:5px 8px;border-radius:999px}.staff-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}.member-picker-title{margin:14px 0 8px;color:var(--muted);font-size:13px;font-weight:800}.member-picker{display:grid;grid-template-columns:1fr;gap:8px;max-height:210px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.04)}.checkbox-row{display:grid!important;grid-template-columns:auto 1fr auto!important;align-items:center!important;gap:10px!important;padding:10px!important;border-radius:14px;background:rgba(255,255,255,.045);color:white!important}.checkbox-row input{width:auto!important}.checkbox-row em{font-style:normal;color:var(--muted);font-size:12px;text-align:right}.modal select{width:100%;border:1px solid var(--line);background:#190812;border-radius:16px;color:white;padding:12px;outline:0}.detail-row.stacked{display:block}.detail-row.stacked strong{display:block;margin-top:6px;font-size:12px;color:#ffd3ea;line-height:1.35}button:disabled{opacity:.45;cursor:not-allowed}.chat-item .avatar{box-shadow:0 0 16px rgba(255,62,165,.10)}
 @media (max-width: 430px){.staff-actions{flex-direction:column;align-items:flex-end;gap:5px}.scope-line{font-size:10px}.member-picker{max-height:180px}.checkbox-row{grid-template-columns:auto 1fr!important}.checkbox-row em{display:none}}
+
+/* ===== V6 mobile refinements (Android/phone layout fixes) ===== */
+@media (max-width: 820px){
+  /* Full-height side panel instead of a floating card — nothing peeks behind it */
+  .sidebar{left:0;top:0;bottom:56px;width:min(440px,100vw);border-radius:0;box-shadow:0 0 60px rgba(0,0,0,.6)}
+  .brandbar{padding:14px 12px 8px;gap:8px;align-items:flex-start}
+  .profile-card{margin:8px 12px}
+  .side-actions{padding:0 12px 10px}
+  .quick-actions{padding:0 12px 10px}
+  .search-wrap{margin:0 12px 10px}
+  .list-panel{padding:0 12px 12px}
+  /* keep the language switch reachable at the top-right of the panel */
+  .lang-switch{margin-left:auto}
+}
+@media (max-width: 440px){
+  .brandbar{gap:7px}
+  .brand-name{font-size:13px;white-space:nowrap}
+  .brand-sub{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+  .lang-switch{gap:3px}
+  .lang-btn{min-width:0;padding:6px 7px;font-size:11px;border-radius:10px}
+  .profile-card .avatar.big{width:44px;height:44px;border-radius:15px}
+  .pill-btn{font-size:12px;padding:9px 4px}
+  .side-actions .ghost-btn.wide{font-size:12px;padding:10px 6px}
+}

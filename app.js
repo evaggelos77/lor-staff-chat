@@ -83,6 +83,9 @@ function uid(){ return 'id-' + Math.random().toString(36).slice(2,10) + '-' + Da
 function nowMinus(minutes){ return new Date(Date.now() - minutes*60000).toISOString(); }
 function formatTime(iso){ try{ return new Intl.DateTimeFormat(localeOf(),{hour:'2-digit',minute:'2-digit'}).format(new Date(iso)); }catch(e){ return new Intl.DateTimeFormat('el-GR',{hour:'2-digit',minute:'2-digit'}).format(new Date(iso)); } }
 function initials(name){ return (name || 'LOR').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(); }
+// Distinct, dark-background-friendly colour per user/conversation so names stand out.
+const NAME_COLORS = ['#ff7eb6','#ffb86b','#ffd86b','#6be4ff','#5af0c0','#9d8bff','#ff8b7a','#73c0ff','#ff9ff3','#7bed9f','#feca57','#48dbfb'];
+function nameColor(key){ const s = String(key || 'x'); let h = 0; for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) >>> 0; } return NAME_COLORS[h % NAME_COLORS.length]; }
 function escapeHTML(s=''){ return String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 // Only allow well-formed base64 data: URLs into src/href — blocks attribute-breakout / script injection.
 const DATA_URL_RE = /^data:[a-z0-9.+-]+\/[a-z0-9.+-]+(?:;[a-z0-9-]+=[^;,]+)*;base64,[A-Za-z0-9+/=\s]+$/i;
@@ -200,7 +203,8 @@ function setTab(tab){
   $('staffPanel').classList.toggle('hidden', tab !== 'staff');
   $('filesPanel').classList.toggle('hidden', tab !== 'files');
   renderCurrentTab();
-  if(window.innerWidth < 821 && tab !== 'chats') els.sidebar.classList.add('open');
+  // On phones every list tab lives in the slide-over panel — open it so the list is visible.
+  if(window.innerWidth < 821) els.sidebar.classList.add('open');
 }
 function renderCurrentTab(){ if(currentTab === 'chats') renderChatList(); if(currentTab === 'staff') renderStaffList(); if(currentTab === 'files') renderFileList(); }
 function renderAll(){ ensureActiveChatVisible(); renderProfile(); updateAdminUI(); renderChatList(); renderStaffList(); renderFileList(); renderActiveChat(); renderAttachmentPreview(); updateSoundUI(); updateSyncUI(); if(els.controlRoomModal && !els.controlRoomModal.classList.contains('hidden')) renderControlRoom(); }
@@ -222,7 +226,7 @@ function renderChatList(){
     return `<button class="chat-item ${chat.id===state.activeChatId?'active':''}" data-chat="${chat.id}">
       <div class="avatar">${escapeHTML(chat.color || initials(chat.name))}</div>
       <div class="chat-copy">
-        <div class="chat-name">${chat.locked ? '🔒 ' : ''}${escapeHTML(displayChatName(chat))}</div>
+        <div class="chat-name" style="color:${nameColor(chat.type==='dm' ? displayChatName(chat) : chat.id)}">${chat.locked ? '🔒 ' : ''}${escapeHTML(displayChatName(chat))}</div>
         <div class="chat-last">${last ? escapeHTML(last.text || attachmentSummary(last.attachments)) : escapeHTML(chat.description || tr('new_convo'))}</div>
         <div class="scope-line">${chatTypeLabel(chat)} • ${accessLabel(chat)} • ${chat.memberIds?.length || 0} ${tr('members_word')}</div>
       </div>
@@ -256,7 +260,7 @@ function renderStaffList(){
   els.staffList.innerHTML = members.map(m => `<div class="staff-item">
     <div class="avatar">${escapeHTML(initials(m.name))}</div>
     <div class="staff-copy">
-      <div class="staff-name">${escapeHTML(m.name)}</div>
+      <div class="staff-name" style="color:${nameColor(m.id)}">${escapeHTML(m.name)}</div>
       <div class="staff-meta">${escapeHTML(m.role || '')} • ${escapeHTML(m.team || '')} ${m.phone ? '• ' + escapeHTML(m.phone) : ''}</div>
     </div>
     <div class="staff-actions">
@@ -322,7 +326,7 @@ function renderMessages(){
     return `${sep}<article class="message ${mine ? 'mine' : ''}">
       <div class="avatar">${escapeHTML(initials(msg.senderName))}</div>
       <div class="bubble">
-        <div class="msg-sender">${escapeHTML(msg.senderName)}</div>
+        <div class="msg-sender"${mine ? '' : ` style="color:${nameColor(msg.senderId || msg.senderName)}"`}>${escapeHTML(msg.senderName)}</div>
         ${msg.text ? `<div class="msg-text">${escapeHTML(msg.text)}</div>` : ''}
         ${renderAttachments(msg.attachments || [])}
         <div class="msg-time">${formatTime(msg.time)} ${mine ? `✓✓ ${readers ? tr('read_label') : ''}` : ''}</div>
@@ -344,7 +348,7 @@ function renderAttachments(attachments){
 function attachmentSummary(atts=[]){ return atts.length ? `📎 ${atts.length}` : ''; }
 function fileIcon(name=''){ const ext = name.split('.').pop().toLowerCase(); if(['pdf'].includes(ext)) return 'PDF'; if(['xls','xlsx'].includes(ext)) return 'XLS'; if(['doc','docx'].includes(ext)) return 'DOC'; if(['zip'].includes(ext)) return 'ZIP'; return '📄'; }
 
-function manualLogin(){ const name = els.loginName.value.trim(); const role = els.loginRole.value.trim() || tr('lbl_role'); if(!name) return showToast(tr('t_write_name_user')); doLogin(name, role); }
+function manualLogin(){ const name = els.loginName.value.trim(); const role = els.loginRole.value.trim() || tr('default_role'); if(!name) return showToast(tr('t_write_name_user')); doLogin(name, role); }
 async function doLogin(name, role){
   let member = null;
   if(serverMode){
@@ -367,6 +371,8 @@ async function doLogin(name, role){
   els.loginModal.classList.add('hidden');
   ensureActiveChatVisible();
   renderAll();
+  // On a phone, land on the conversation list (the slide-over panel) after login.
+  if(window.innerWidth < 821) els.sidebar.classList.add('open');
   showToast(tr('t_logged_in', { name: member.name }));
 }
 function normalizeName(s=''){ return s.toLocaleLowerCase('el-GR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
@@ -374,7 +380,7 @@ function logout(){ localStorage.removeItem(PROFILE_KEY); profile = null; els.log
 function saveMember(){
   if(!isAdmin()) return showToast(tr('t_only_admin_person'));
   const name = els.memberName.value.trim(); if(!name) return showToast(tr('t_write_name_staff'));
-  const member = { id:uid(), name, role:els.memberRole.value.trim() || tr('lbl_role'), phone:els.memberPhone.value.trim(), team:els.memberTeam.value.trim() || tr('lbl_group'), online:false, permissions:['staff'] };
+  const member = { id:uid(), name, role:els.memberRole.value.trim() || tr('default_role'), phone:els.memberPhone.value.trim(), team:els.memberTeam.value.trim() || tr('lbl_group'), online:false, permissions:['staff'] };
   state.members.push(member);
   state.chats.find(c => c.id === 'general')?.memberIds.push(member.id);
   saveState(); sendOp({ type:'member', member }); closeModals(); renderAll(); showToast(tr('t_name_saved'));
@@ -616,7 +622,7 @@ function renderControlRoom(){
     return `<button class="cr-row" data-cr-chat="${chat.id}">
       <div class="avatar small">${escapeHTML(chat.color || initials(chat.name))}</div>
       <div class="cr-row-copy">
-        <div class="cr-row-title">${chat.locked ? '🔒 ' : ''}${escapeHTML(chat.name)}</div>
+        <div class="cr-row-title" style="color:${nameColor(chat.type==='dm' ? chat.name : chat.id)}">${chat.locked ? '🔒 ' : ''}${escapeHTML(chat.name)}</div>
         <div class="cr-row-sub">${chatTypeLabel(chat)} • ${accessLabel(chat)} • ${chat.memberIds?.length || 0} ${tr('members_word')} • ${tr('cr_last')}: ${lastActivity(chat)}</div>
       </div>
       ${unread ? `<span class="badge">${unread}</span>` : ''}
@@ -630,7 +636,7 @@ function renderControlRoom(){
   els.crStaff.innerHTML = state.members.map(m => `<div class="cr-row static">
     <div class="avatar small">${escapeHTML(initials(m.name))}</div>
     <div class="cr-row-copy">
-      <div class="cr-row-title">${escapeHTML(m.name)}</div>
+      <div class="cr-row-title" style="color:${nameColor(m.id)}">${escapeHTML(m.name)}</div>
       <div class="cr-row-sub">${escapeHTML(m.role || '')}${m.team ? ' • ' + escapeHTML(m.team) : ''}</div>
     </div>
     <span class="cr-pill ${m.online ? 'on' : 'off'}">${m.online ? tr('cr_online') : tr('cr_offline')}</span>
