@@ -2,7 +2,7 @@ const STORAGE_KEY = 'lor_staff_chat_v5_state';
 const PROFILE_KEY = 'lor_staff_chat_v5_profile';
 const SOUND_KEY = 'lor_staff_chat_v5_sound_enabled';
 const ACTIVE_KEY = 'lor_staff_chat_v5_active_chat';
-const APP_VERSION = 'V5 ONLINE';
+const APP_VERSION = 'V6 ONLINE • EL/EN/SQ';
 
 const defaultState = () => ({
   activeChatId: 'general',
@@ -55,6 +55,7 @@ let serverMode = false;
 let serverRevision = 0;
 let syncTimer = null;
 let markReadTimer = null;
+let outbox = [];
 let soundEnabled = localStorage.getItem(SOUND_KEY) === '1';
 let audioCtx = null;
 let knownMessageIds = new Set();
@@ -71,14 +72,22 @@ const els = {
   memberModal: $('memberModal'), memberName: $('memberName'), memberRole: $('memberRole'), memberPhone: $('memberPhone'), memberTeam: $('memberTeam'), saveMemberBtn: $('saveMemberBtn'),
   groupModal: $('groupModal'), groupName: $('groupName'), groupDescription: $('groupDescription'), groupAccess: $('groupAccess'), memberPicker: $('memberPicker'), saveGroupBtn: $('saveGroupBtn'),
   announceModal: $('announceModal'), announceText: $('announceText'), saveAnnounceBtn: $('saveAnnounceBtn'),
-  searchInput: $('searchInput'), toast: $('toast'), soundBtn: $('soundBtn'), testSoundBtn: $('testSoundBtn'), syncHint: $('syncHint')
+  searchInput: $('searchInput'), toast: $('toast'), soundBtn: $('soundBtn'), testSoundBtn: $('testSoundBtn'), syncHint: $('syncHint'),
+  langSwitch: $('langSwitch'), langSwitchLogin: $('langSwitchLogin'), inviteBtn: $('inviteBtn'), controlRoomBtn: $('controlRoomBtn'),
+  controlRoomModal: $('controlRoomModal'), crKpis: $('crKpis'), crConvos: $('crConvos'), crStaff: $('crStaff'), crFiles: $('crFiles')
 };
 
+const LOCALE_MAP = { el:'el-GR', en:'en-GB', sq:'sq-AL' };
+function localeOf(){ return LOCALE_MAP[getLang()] || 'el-GR'; }
 function uid(){ return 'id-' + Math.random().toString(36).slice(2,10) + '-' + Date.now().toString(36); }
 function nowMinus(minutes){ return new Date(Date.now() - minutes*60000).toISOString(); }
-function formatTime(iso){ return new Intl.DateTimeFormat('el-GR',{hour:'2-digit',minute:'2-digit'}).format(new Date(iso)); }
+function formatTime(iso){ try{ return new Intl.DateTimeFormat(localeOf(),{hour:'2-digit',minute:'2-digit'}).format(new Date(iso)); }catch(e){ return new Intl.DateTimeFormat('el-GR',{hour:'2-digit',minute:'2-digit'}).format(new Date(iso)); } }
 function initials(name){ return (name || 'LOR').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(); }
 function escapeHTML(s=''){ return String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+// Only allow well-formed base64 data: URLs into src/href — blocks attribute-breakout / script injection.
+const DATA_URL_RE = /^data:[a-z0-9.+-]+\/[a-z0-9.+-]+(?:;[a-z0-9-]+=[^;,]+)*;base64,[A-Za-z0-9+/=\s]+$/i;
+function safeDataUrl(s){ s = String(s || ''); return DATA_URL_RE.test(s) ? s : ''; }
+function safeImg(s){ const d = safeDataUrl(s); return /^data:image\//i.test(d) ? d : ''; }
 function fileSize(bytes){ if(bytes < 1024) return bytes + ' B'; if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB'; return (bytes/1024/1024).toFixed(1) + ' MB'; }
 function loadState(){
   try{ const raw = localStorage.getItem(STORAGE_KEY); var s = raw ? JSON.parse(raw) : defaultState(); }
@@ -101,8 +110,8 @@ function canSeeChat(chat){ if(!profile) return true; if(isAdmin()) return true; 
 function visibleChats(){ return state.chats.filter(canSeeChat); }
 function activeChat(){ ensureActiveChatVisible(); return state.chats.find(c => c.id === state.activeChatId) || visibleChats()[0] || state.chats[0]; }
 function activeMessages(){ const chat = activeChat(); return chat ? (state.messages[chat.id] || []) : []; }
-function accessLabel(chat){ if(chat.access === 'all') return 'Όλοι'; if(chat.access === 'locked') return 'Κλειδωμένο'; if(chat.type === 'dm') return 'Ιδιωτικό'; return 'Μόνο μέλη'; }
-function chatTypeLabel(chat){ return chat.type === 'dm' ? 'Προσωπική' : 'Ομάδα'; }
+function accessLabel(chat){ if(chat.access === 'all') return tr('access_all'); if(chat.access === 'locked') return tr('access_locked'); if(chat.type === 'dm') return tr('access_private'); return tr('access_members'); }
+function chatTypeLabel(chat){ return chat.type === 'dm' ? tr('type_dm') : tr('type_group'); }
 function visibleMembersForStaff(){
   if(!profile || isAdmin()) return state.members;
   const ids = new Set();
@@ -121,6 +130,8 @@ function ensureActiveChatVisible(){
 async function boot(){
   await initServerMode();
   if(!profile){ els.loginModal.classList.remove('hidden'); }
+  renderLangSwitch();
+  applyStaticI18n();
   bindEvents();
   renderAll();
   updateSoundUI();
@@ -129,22 +140,41 @@ async function boot(){
   bootCompleted = true;
   registerSW();
 }
+function renderLangSwitch(){
+  const html = LANGS.map(l => `<button class="lang-btn ${l.code===getLang()?'active':''}" data-lang="${l.code}" title="${l.name}">${l.label}</button>`).join('');
+  [els.langSwitch, els.langSwitchLogin].forEach(box => {
+    if(!box) return;
+    box.innerHTML = html;
+    box.querySelectorAll('[data-lang]').forEach(btn => btn.addEventListener('click', () => changeLang(btn.dataset.lang)));
+  });
+}
+function changeLang(code){
+  setLang(code);
+  renderLangSwitch();
+  applyStaticI18n();
+  renderAll();
+}
 
 function bindEvents(){
   document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => closeModals()));
   document.querySelectorAll('.pill-btn, .mobile-nav button').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.tab)));
   $('mobileMenuBtn').addEventListener('click', () => els.sidebar.classList.toggle('open'));
-  $('settingsBtn').addEventListener('click', () => showToast('Αλλαγή χρήστη από το κουμπί δεξιά. Ο Admin βλέπει όλες τις συνομιλίες.'));
+  $('settingsBtn').addEventListener('click', () => showToast(tr('t_change_user_hint')));
   if(els.soundBtn) els.soundBtn.addEventListener('click', toggleSound);
-  if(els.testSoundBtn) els.testSoundBtn.addEventListener('click', () => { enableSound(); playNotificationSound(); showToast('Δοκιμή ήχου ειδοποίησης.'); });
+  if(els.testSoundBtn) els.testSoundBtn.addEventListener('click', () => { enableSound(); playNotificationSound(); showToast(tr('t_test_sound')); });
   $('newGroupBtn').addEventListener('click', () => { renderGroupMemberPicker(); openModal(els.groupModal); });
-  $('addMemberBtn').addEventListener('click', () => { if(!isAdmin()) return showToast('Μόνο ο Admin προσθέτει νέο προσωπικό στο demo.'); openModal(els.memberModal); });
-  $('announceBtn').addEventListener('click', () => { if(!canSendAnnouncement()) return showToast('Ανακοίνωση μπορεί να στείλει Admin ή υπεύθυνος ομάδας.'); els.announceText.value = state.pinned || ''; openModal(els.announceModal); });
-  $('infoBtn').addEventListener('click', () => showToast('Κάθε συνομιλία έχει δικά της μέλη και δικαιώματα.'));
+  $('addMemberBtn').addEventListener('click', () => { if(!isAdmin()) return showToast(tr('t_only_admin_member')); openModal(els.memberModal); });
+  $('announceBtn').addEventListener('click', () => { if(!canSendAnnouncement()) return showToast(tr('t_announce_permission')); els.announceText.value = state.pinned || ''; openModal(els.announceModal); });
+  $('infoBtn').addEventListener('click', () => showToast(tr('t_each_chat_perms')));
   $('exportBtn').addEventListener('click', exportData);
   $('demoReplyBtn').addEventListener('click', demoReply);
   $('clearDemoBtn').addEventListener('click', resetDemo);
   $('logoutBtn').addEventListener('click', logout);
+  if(els.inviteBtn) els.inviteBtn.addEventListener('click', inviteShare);
+  if(els.controlRoomBtn) els.controlRoomBtn.addEventListener('click', openControlRoom);
+  $('crBroadcastBtn').addEventListener('click', () => { closeModals(); if(!canSendAnnouncement()) return showToast(tr('t_announce_permission')); els.announceText.value = state.pinned || ''; openModal(els.announceModal); });
+  $('crExportBtn').addEventListener('click', exportData);
+  $('crResetBtn').addEventListener('click', resetDemo);
 
   els.loginBtn.addEventListener('click', manualLogin);
   els.demoLoginBtn.addEventListener('click', () => doLogin('Ευάγγελος','Admin / Διοίκηση'));
@@ -173,10 +203,11 @@ function setTab(tab){
   if(window.innerWidth < 821 && tab !== 'chats') els.sidebar.classList.add('open');
 }
 function renderCurrentTab(){ if(currentTab === 'chats') renderChatList(); if(currentTab === 'staff') renderStaffList(); if(currentTab === 'files') renderFileList(); }
-function renderAll(){ ensureActiveChatVisible(); renderProfile(); renderChatList(); renderStaffList(); renderFileList(); renderActiveChat(); renderAttachmentPreview(); updateSoundUI(); updateSyncUI(); }
+function renderAll(){ ensureActiveChatVisible(); renderProfile(); updateAdminUI(); renderChatList(); renderStaffList(); renderFileList(); renderActiveChat(); renderAttachmentPreview(); updateSoundUI(); updateSyncUI(); if(els.controlRoomModal && !els.controlRoomModal.classList.contains('hidden')) renderControlRoom(); }
+function updateAdminUI(){ if(els.controlRoomBtn) els.controlRoomBtn.classList.toggle('hidden', !isAdmin()); }
 function renderProfile(){
   const name = profile?.name || 'Demo Admin';
-  const role = profile?.role || 'Διαχειριστής';
+  const role = profile?.role || tr('role_admin_default');
   els.profileName.textContent = name;
   els.profileRole.textContent = role;
   els.profileAvatar.textContent = initials(name);
@@ -192,12 +223,12 @@ function renderChatList(){
       <div class="avatar">${escapeHTML(chat.color || initials(chat.name))}</div>
       <div class="chat-copy">
         <div class="chat-name">${chat.locked ? '🔒 ' : ''}${escapeHTML(displayChatName(chat))}</div>
-        <div class="chat-last">${last ? escapeHTML(last.text || attachmentSummary(last.attachments)) : escapeHTML(chat.description || 'Νέα συνομιλία')}</div>
-        <div class="scope-line">${chatTypeLabel(chat)} • ${accessLabel(chat)} • ${chat.memberIds?.length || 0} μέλη</div>
+        <div class="chat-last">${last ? escapeHTML(last.text || attachmentSummary(last.attachments)) : escapeHTML(chat.description || tr('new_convo'))}</div>
+        <div class="scope-line">${chatTypeLabel(chat)} • ${accessLabel(chat)} • ${chat.memberIds?.length || 0} ${tr('members_word')}</div>
       </div>
       ${unread ? `<span class="badge">${unread}</span>` : `<span class="status-dot"></span>`}
     </button>`;
-  }).join('') || `<div class="empty-state">Δεν έχεις πρόσβαση σε συνομιλίες με αυτή την αναζήτηση.</div>`;
+  }).join('') || `<div class="empty-state">${tr('empty_no_access_search')}</div>`;
   els.chatList.querySelectorAll('[data-chat]').forEach(btn => btn.addEventListener('click', () => {
     state.activeChatId = btn.dataset.chat;
     markChatRead(state.activeChatId);
@@ -226,26 +257,29 @@ function renderStaffList(){
     <div class="avatar">${escapeHTML(initials(m.name))}</div>
     <div class="staff-copy">
       <div class="staff-name">${escapeHTML(m.name)}</div>
-      <div class="staff-meta">${escapeHTML(m.role || 'Υπάλληλος')} • ${escapeHTML(m.team || 'Χωρίς ομάδα')} ${m.phone ? '• ' + escapeHTML(m.phone) : ''}</div>
+      <div class="staff-meta">${escapeHTML(m.role || '')} • ${escapeHTML(m.team || '')} ${m.phone ? '• ' + escapeHTML(m.phone) : ''}</div>
     </div>
     <div class="staff-actions">
-      ${profile && m.id !== profile.memberId ? `<button class="mini-btn" data-dm="${m.id}">Μήνυμα</button>` : `<span class="tag">Εσύ</span>`}
+      ${profile && m.id !== profile.memberId ? `<button class="mini-btn" data-dm="${m.id}">${tr('msg_btn')}</button>` : `<span class="tag">${tr('you_label')}</span>`}
       <span class="status-dot" style="opacity:${m.online ? 1 : .25}"></span>
     </div>
-  </div>`).join('') || `<div class="empty-state">Δεν βρέθηκαν ονόματα.</div>`;
+  </div>`).join('') || `<div class="empty-state">${tr('empty_no_names')}</div>`;
   els.staffList.querySelectorAll('[data-dm]').forEach(btn => btn.addEventListener('click', () => openPrivateChat(btn.dataset.dm)));
 }
 function renderFileList(){
   const q = (els.searchInput.value || '').toLowerCase().trim();
   const files = collectFiles().filter(f => !q || (f.name + ' ' + f.chatName + ' ' + f.senderName).toLowerCase().includes(q));
-  els.fileList.innerHTML = files.map(f => `<div class="file-item">
-    ${f.type.startsWith('image/') ? `<img class="attachment-thumb" src="${f.data}" alt="${escapeHTML(f.name)}" />` : `<div class="attachment-icon">${fileIcon(f.name)}</div>`}
+  els.fileList.innerHTML = files.map(f => {
+    const img = (f.type||'').startsWith('image/') ? safeImg(f.data) : '';
+    const dl = safeDataUrl(f.data);
+    return `<div class="file-item">
+    ${img ? `<img class="attachment-thumb" src="${img}" alt="${escapeHTML(f.name)}" />` : `<div class="attachment-icon">${fileIcon(f.name)}</div>`}
     <div class="file-copy">
       <div class="file-name">${escapeHTML(f.name)}</div>
       <div class="file-meta">${f.locked ? '🔒 ' : ''}${escapeHTML(f.chatName)} • ${escapeHTML(f.senderName)} • ${fileSize(f.size || 0)}</div>
     </div>
-    <a class="mini-btn" href="${f.data}" download="${escapeHTML(f.name)}">Λήψη</a>
-  </div>`).join('') || `<div class="empty-state">Δεν έχεις ορατά αρχεία ακόμη.</div>`;
+    ${dl ? `<a class="mini-btn" href="${dl}" download="${escapeHTML(f.name)}">${tr('download')}</a>` : ''}
+  </div>`; }).join('') || `<div class="empty-state">${tr('empty_no_files')}</div>`;
 }
 function collectFiles(){
   const files = [];
@@ -260,16 +294,16 @@ function renderActiveChat(){
   if(!chat) return;
   markChatRead(chat.id);
   els.activeChatName.textContent = (chat.locked ? '🔒 ' : '') + displayChatName(chat);
-  els.activeChatMeta.textContent = `${chat.memberIds?.length || 0} μέλη • ${chatTypeLabel(chat)} • ${accessLabel(chat)} • ${serverMode ? '🟢 online' : 'τοπικό demo'}`;
+  els.activeChatMeta.textContent = `${chat.memberIds?.length || 0} ${tr('members_word')} • ${chatTypeLabel(chat)} • ${accessLabel(chat)} • ${serverMode ? tr('meta_online') : tr('meta_local')}`;
   els.activeChatAvatar.textContent = chat.color || initials(displayChatName(chat));
-  els.pinnedNotice.textContent = state.pinned;
+  els.pinnedNotice.textContent = state.pinned || tr('pinned_default');
   els.detailChatName.textContent = displayChatName(chat);
   els.detailChatType.textContent = chatTypeLabel(chat);
   els.detailMembers.textContent = chat.memberIds?.length || 0;
   els.detailFiles.textContent = collectFiles().filter(f => f.chatName === displayChatName(chat)).length;
   if(els.detailAccess) els.detailAccess.textContent = accessLabel(chat);
   if(els.detailAllowed) els.detailAllowed.textContent = allowedNames(chat);
-  els.messageInput.placeholder = canWriteToChat(chat) ? 'Γράψε μήνυμα...' : 'Δεν έχεις δικαίωμα αποστολής εδώ';
+  els.messageInput.placeholder = canWriteToChat(chat) ? tr('msg_ph') : tr('ph_no_permission');
   els.sendBtn.disabled = !canWriteToChat(chat);
   renderMessages();
 }
@@ -280,7 +314,7 @@ function renderMessages(){
   const msgs = activeMessages();
   let lastDate = '';
   els.messages.innerHTML = msgs.map(msg => {
-    const d = new Date(msg.time).toLocaleDateString('el-GR');
+    const d = new Date(msg.time).toLocaleDateString(localeOf());
     const sep = d !== lastDate ? `<div class="day-separator">${d}</div>` : '';
     lastDate = d;
     const mine = isMine(msg);
@@ -291,23 +325,26 @@ function renderMessages(){
         <div class="msg-sender">${escapeHTML(msg.senderName)}</div>
         ${msg.text ? `<div class="msg-text">${escapeHTML(msg.text)}</div>` : ''}
         ${renderAttachments(msg.attachments || [])}
-        <div class="msg-time">${formatTime(msg.time)} ${mine ? `✓✓ ${readers ? 'διαβάστηκε' : ''}` : ''}</div>
+        <div class="msg-time">${formatTime(msg.time)} ${mine ? `✓✓ ${readers ? tr('read_label') : ''}` : ''}</div>
       </div>
     </article>`;
-  }).join('') || `<div class="empty-state center">Ξεκίνα τη συνομιλία. ${chat?.locked ? 'Η συνομιλία είναι κλειδωμένη μόνο στα μέλη της.' : ''}</div>`;
+  }).join('') || `<div class="empty-state center">${tr('empty_start_convo')} ${chat?.locked ? tr('empty_locked_hint') : ''}</div>`;
   els.messages.scrollTop = els.messages.scrollHeight;
 }
 function renderAttachments(attachments){
   if(!attachments.length) return '';
-  return attachments.map(att => `<div class="attachment-card">
-    ${att.type.startsWith('image/') ? `<img class="attachment-thumb" src="${att.data}" alt="${escapeHTML(att.name)}" />` : `<div class="attachment-icon">${fileIcon(att.name)}</div>`}
-    <div class="attachment-actions"><div class="attachment-title">${escapeHTML(att.name)}</div><a href="${att.data}" download="${escapeHTML(att.name)}">Άνοιγμα / Λήψη</a></div>
-  </div>`).join('');
+  return attachments.map(att => {
+    const img = (att.type||'').startsWith('image/') ? safeImg(att.data) : '';
+    const dl = safeDataUrl(att.data);
+    const thumb = img ? `<img class="attachment-thumb" src="${img}" alt="${escapeHTML(att.name)}" />` : `<div class="attachment-icon">${fileIcon(att.name)}</div>`;
+    const link = dl ? `<a href="${dl}" download="${escapeHTML(att.name)}">${tr('open_download')}</a>` : '';
+    return `<div class="attachment-card">${thumb}<div class="attachment-actions"><div class="attachment-title">${escapeHTML(att.name)}</div>${link}</div></div>`;
+  }).join('');
 }
-function attachmentSummary(atts=[]){ return atts.length ? `${atts.length} συνημμένο/α` : ''; }
+function attachmentSummary(atts=[]){ return atts.length ? `📎 ${atts.length}` : ''; }
 function fileIcon(name=''){ const ext = name.split('.').pop().toLowerCase(); if(['pdf'].includes(ext)) return 'PDF'; if(['xls','xlsx'].includes(ext)) return 'XLS'; if(['doc','docx'].includes(ext)) return 'DOC'; if(['zip'].includes(ext)) return 'ZIP'; return '📄'; }
 
-function manualLogin(){ const name = els.loginName.value.trim(); const role = els.loginRole.value.trim() || 'Υπάλληλος'; if(!name) return showToast('Γράψε όνομα χρήστη.'); doLogin(name, role); }
+function manualLogin(){ const name = els.loginName.value.trim(); const role = els.loginRole.value.trim() || tr('lbl_role'); if(!name) return showToast(tr('t_write_name_user')); doLogin(name, role); }
 async function doLogin(name, role){
   let member = null;
   if(serverMode){
@@ -319,7 +356,7 @@ async function doLogin(name, role){
   if(!member){
     member = state.members.find(m => normalizeName(m.name) === normalizeName(name));
     if(!member){
-      member = {id: uid(), name, role, phone:'', team:'Demo χρήστες', online:true, permissions:['staff']};
+      member = {id: uid(), name, role, phone:'', team:tr('tab_staff'), online:true, permissions:['staff']};
       state.members.push(member);
       state.chats.find(c=>c.id==='general')?.memberIds.push(member.id);
     }
@@ -330,17 +367,17 @@ async function doLogin(name, role){
   els.loginModal.classList.add('hidden');
   ensureActiveChatVisible();
   renderAll();
-  showToast(`Μπήκες ως ${member.name}. Βλέπεις μόνο όσα έχεις δικαίωμα.`);
+  showToast(tr('t_logged_in', { name: member.name }));
 }
 function normalizeName(s=''){ return s.toLocaleLowerCase('el-GR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
-function logout(){ localStorage.removeItem(PROFILE_KEY); profile = null; els.loginModal.classList.remove('hidden'); renderAll(); showToast('Μπορείς να μπεις με άλλο όνομα για test δικαιωμάτων.'); }
+function logout(){ localStorage.removeItem(PROFILE_KEY); profile = null; els.loginModal.classList.remove('hidden'); renderAll(); showToast(tr('logout_hint')); }
 function saveMember(){
-  if(!isAdmin()) return showToast('Μόνο ο Admin προσθέτει νέο προσωπικό.');
-  const name = els.memberName.value.trim(); if(!name) return showToast('Γράψε όνομα προσωπικού.');
-  const member = { id:uid(), name, role:els.memberRole.value.trim() || 'Υπάλληλος', phone:els.memberPhone.value.trim(), team:els.memberTeam.value.trim() || 'Γενική ομάδα', online:false, permissions:['staff'] };
+  if(!isAdmin()) return showToast(tr('t_only_admin_person'));
+  const name = els.memberName.value.trim(); if(!name) return showToast(tr('t_write_name_staff'));
+  const member = { id:uid(), name, role:els.memberRole.value.trim() || tr('lbl_role'), phone:els.memberPhone.value.trim(), team:els.memberTeam.value.trim() || tr('lbl_group'), online:false, permissions:['staff'] };
   state.members.push(member);
   state.chats.find(c => c.id === 'general')?.memberIds.push(member.id);
-  saveState(); sendOp({ type:'member', member }); closeModals(); renderAll(); showToast('Το όνομα αποθηκεύτηκε και μπήκε στη Γενική Ομάδα.');
+  saveState(); sendOp({ type:'member', member }); closeModals(); renderAll(); showToast(tr('t_name_saved'));
   els.memberName.value = els.memberRole.value = els.memberPhone.value = els.memberTeam.value = '';
 }
 function renderGroupMemberPicker(){
@@ -350,46 +387,46 @@ function renderGroupMemberPicker(){
   els.memberPicker.innerHTML = members.map(m => `<label class="checkbox-row"><input type="checkbox" value="${m.id}" ${m.id === me ? 'checked disabled' : ''} /> <span>${escapeHTML(m.name)}</span><em>${escapeHTML(m.role || '')}</em></label>`).join('');
 }
 function saveGroup(){
-  const name = els.groupName.value.trim(); if(!name) return showToast('Γράψε όνομα ομάδας.');
+  const name = els.groupName.value.trim(); if(!name) return showToast(tr('t_write_group_name'));
   const selected = els.memberPicker ? [...els.memberPicker.querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value) : [];
   if(profile && !selected.includes(profile.memberId)) selected.push(profile.memberId);
-  if(selected.length < 2) return showToast('Βάλε τουλάχιστον 2 άτομα στην ομάδα.');
+  if(selected.length < 2) return showToast(tr('t_min2'));
   const access = els.groupAccess?.value || 'members';
-  const chat = { id: uid(), type:'group', name, description: els.groupDescription.value.trim() || 'Νέα κλειδωμένη ομάδα προσωπικού', memberIds: selected, unread:0, color: initials(name).slice(0,1), access, locked: access !== 'all' };
-  const seed = { id:uid(), senderId: profile?.memberId || 'system', senderName: profile?.name || 'LOR Admin', text:`Δημιουργήθηκε η ομάδα: ${name}. Ορατή μόνο στα επιλεγμένα μέλη.`, time:new Date().toISOString(), attachments:[], readBy: profile ? [profile.memberId] : [] };
+  const chat = { id: uid(), type:'group', name, description: els.groupDescription.value.trim() || tr('group_modal_title'), memberIds: selected, unread:0, color: initials(name).slice(0,1), access, locked: access !== 'all' };
+  const seed = { id:uid(), senderId: profile?.memberId || 'system', senderName: profile?.name || 'LOR Admin', text: tr('created_group_msg', { name }), time:new Date().toISOString(), attachments:[], readBy: profile ? [profile.memberId] : [] };
   state.chats.unshift(chat);
   state.messages[chat.id] = [seed];
   state.activeChatId = chat.id;
-  saveState(); sendOp({ type:'group', chat, message: seed }); closeModals(); renderAll(); showToast('Η νέα ομάδα δημιουργήθηκε με δικαιώματα.');
+  saveState(); sendOpQ({ type:'group', chat, message: seed }); closeModals(); renderAll(); showToast(tr('t_group_created'));
   els.groupName.value = els.groupDescription.value = '';
 }
 function openPrivateChat(memberId){
-  if(!profile) return showToast('Πρώτα κάνε είσοδο.');
+  if(!profile) return showToast(tr('t_login_first'));
   if(memberId === profile.memberId) return;
   const target = memberById(memberId); if(!target) return;
   let chat = state.chats.find(c => c.type === 'dm' && c.memberIds.includes(profile.memberId) && c.memberIds.includes(memberId));
   if(!chat){
-    chat = { id:'dm-' + [profile.memberId, memberId].sort().join('-'), type:'dm', name:target.name, description:`Προσωπική συνομιλία με ${target.name}`, memberIds:[profile.memberId, memberId], unread:0, color: initials(target.name).slice(0,1), access:'private', locked:true };
+    chat = { id:'dm-' + [profile.memberId, memberId].sort().join('-'), type:'dm', name:target.name, description: tr('access_private'), memberIds:[profile.memberId, memberId], unread:0, color: initials(target.name).slice(0,1), access:'private', locked:true };
     state.chats.unshift(chat); state.messages[chat.id] = [];
     sendOp({ type:'dm', chat });
   }
   state.activeChatId = chat.id;
   saveState(); renderAll(); setTab('chats'); els.sidebar.classList.remove('open');
-  showToast(`Άνοιξε προσωπικό chat με ${target.name}.`);
+  showToast(tr('t_dm_opened', { name: target.name }));
 }
 function canSendAnnouncement(){ return isAdmin() || hasPermission('event_manager'); }
 function saveAnnouncement(){
-  if(!canSendAnnouncement()) return showToast('Δεν έχεις δικαίωμα ανακοίνωσης.');
-  const text = els.announceText.value.trim(); if(!text) return showToast('Γράψε ανακοίνωση.');
-  state.pinned = text; const msg = addMessage({ text:'📌 Νέα ανακοίνωση: ' + text, attachments:[] });
-  saveState(); sendOp({ type:'announce', chatId: state.activeChatId, pinned: text, message: msg }); closeModals(); renderAll(); showToast('Η ανακοίνωση καρφιτσώθηκε στη συγκεκριμένη συνομιλία.');
+  if(!canSendAnnouncement()) return showToast(tr('t_no_announce_perm'));
+  const text = els.announceText.value.trim(); if(!text) return showToast(tr('t_write_announce'));
+  state.pinned = text; const msg = addMessage({ text: tr('announce_prefix') + text, attachments:[] });
+  saveState(); sendOpQ({ type:'announce', chatId: state.activeChatId, pinned: text, message: msg }); closeModals(); renderAll(); showToast(tr('t_announce_pinned'));
 }
 
 async function handleFiles(files){
   if(!files.length) return;
-  const chat = activeChat(); if(!canWriteToChat(chat)) return showToast('Δεν έχεις δικαίωμα να ανεβάσεις εδώ.');
+  const chat = activeChat(); if(!canWriteToChat(chat)) return showToast(tr('t_no_upload_perm'));
   for(const file of files){
-    if(file.size > 4 * 1024 * 1024){ showToast(`Το ${file.name} είναι μεγάλο για demo. Μέχρι 4MB.`); continue; }
+    if(file.size > 4 * 1024 * 1024){ showToast(tr('t_file_too_big', { name: file.name })); continue; }
     const data = await readFileAsDataURL(file);
     pendingAttachments.push({ id:uid(), name:file.name, type:file.type || 'application/octet-stream', size:file.size, data });
   }
@@ -403,11 +440,11 @@ function renderAttachmentPreview(){
   els.attachmentPreview.querySelectorAll('[data-remove-att]').forEach(btn => btn.addEventListener('click', () => { pendingAttachments = pendingAttachments.filter(a => a.id !== btn.dataset.removeAtt); renderAttachmentPreview(); }));
 }
 function sendMessage(){
-  const chat = activeChat(); if(!canWriteToChat(chat)) return showToast('Δεν έχεις δικαίωμα αποστολής σε αυτή τη συνομιλία.');
+  const chat = activeChat(); if(!canWriteToChat(chat)) return showToast(tr('t_no_send_perm'));
   const text = els.messageInput.value.trim(); if(!text && !pendingAttachments.length) return;
   const msg = addMessage({ text, attachments: pendingAttachments });
   pendingAttachments = []; els.messageInput.value = ''; autoGrow(); renderAttachmentPreview(); saveState(); renderAll();
-  sendOp({ type:'message', chatId: chat.id, message: msg });
+  sendOpQ({ type:'message', chatId: chat.id, message: msg });
 }
 function addMessage({text, attachments}){
   const p = profile || { memberId:'m-ev', name:'Ευάγγελος' };
@@ -417,25 +454,32 @@ function addMessage({text, attachments}){
   return msg;
 }
 function demoReply(){
-  const chat = activeChat();
+  const chat = activeChat(); if(!chat) return;
   const otherIds = (chat.memberIds || []).filter(id => id !== profile?.memberId);
-  const member = memberById(otherIds[Math.floor(Math.random()*otherIds.length)]) || state.members[1];
-  const replies = ['Το είδα, προχωράω τώρα.','Έφτασα στον χώρο και περιμένω οδηγίες.','Ανέβασα τα στοιχεία στη σωστή συνομιλία.','Το κρατάω κλειδωμένο μόνο σε αυτή την ομάδα.','Ο εξοπλισμός είναι έτοιμος.'];
+  const member = memberById(otherIds[Math.floor(Math.random()*otherIds.length)]) || state.members.find(m => m.id !== profile?.memberId);
+  if(!member) return showToast(tr('t_demo_reply_added'));
+  const replies = DEMO_REPLIES[getLang()] || DEMO_REPLIES.el;
   const reply = { id:uid(), senderId:member.id, senderName:member.name, text:replies[Math.floor(Math.random()*replies.length)], time:new Date().toISOString(), attachments:[], readBy:[member.id] };
+  if(!state.messages[chat.id]) state.messages[chat.id] = [];
   state.messages[chat.id].push(reply);
-  saveState(); sendOp({ type:'message', chatId: chat.id, message: reply }); renderAll(); playNotificationSound(); showToast('Προστέθηκε δοκιμαστική απάντηση στη σωστή συνομιλία.');
+  saveState(); sendOpQ({ type:'message', chatId: chat.id, message: reply }); renderAll(); playNotificationSound(); showToast(tr('t_demo_reply_added'));
 }
+const DEMO_REPLIES = {
+  el: ['Το είδα, προχωράω τώρα.','Έφτασα στον χώρο και περιμένω οδηγίες.','Ανέβασα τα στοιχεία στη σωστή συνομιλία.','Το κρατάω κλειδωμένο μόνο σε αυτή την ομάδα.','Ο εξοπλισμός είναι έτοιμος.'],
+  en: ['Saw it, moving on it now.','I’ve arrived on site and I’m waiting for instructions.','Uploaded the details to the right conversation.','Keeping it locked to this group only.','The equipment is ready.'],
+  sq: ['E pashë, po e bëj tani.','Mbërrita në vend dhe po pres udhëzime.','I ngarkova të dhënat në bisedën e saktë.','Po e mbaj të kyçur vetëm në këtë grup.','Pajisjet janë gati.']
+};
 async function resetDemo(){
-  if(!confirm('Να καθαρίσει το demo και να γυρίσει στην αρχική κατάσταση;')) return;
+  if(!confirm(tr('confirm_clear'))) return;
   if(serverMode){ await sendOp({ type:'reset' }); await fetchServerState(); }
   else { state = defaultState(); }
-  pendingAttachments = []; saveState(); renderAll(); showToast('Το demo καθαρίστηκε.');
+  pendingAttachments = []; saveState(); renderAll(); showToast(tr('t_demo_cleared'));
 }
 function exportData(){
   const payload = { exportedAt:new Date().toISOString(), appVersion:APP_VERSION, profile, visibleOnly: !isAdmin(), state: isAdmin() ? state : {...state, chats: visibleChats(), messages: Object.fromEntries(visibleChats().map(c => [c.id, state.messages[c.id] || []]))} };
   const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob); const a = document.createElement('a');
-  a.href = url; a.download = 'lor-staff-chat-export.json'; a.click(); URL.revokeObjectURL(url); showToast('Κατέβηκε export με βάση τα δικαιώματά σου.');
+  a.href = url; a.download = 'lor-staff-chat-export.json'; a.click(); URL.revokeObjectURL(url); showToast(tr('t_export_done'));
 }
 function autoGrow(){ const el = els.messageInput; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
 function openModal(modal){ modal.classList.remove('hidden'); }
@@ -456,17 +500,18 @@ async function initServerMode(){
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       // Re-register an existing profile so this device's user exists server-side (e.g. after a restart).
       if(profile && profile.name) await sendOp({ type:'login', name: profile.name, role: profile.role });
-      startSyncLoop(); showToast('Live σύνδεση ενεργή — όλοι βλέπουν τα μηνύματα σε πραγματικό χρόνο.');
+      startSyncLoop(); showToast(tr('t_live_active'));
     }
   }catch(e){ serverMode = false; }
 }
 function updateSyncUI(){
   if(!els.syncHint) return;
   const chat = activeChat();
-  if(serverMode){ els.syncHint.textContent = `🟢 Online • ${accessLabel(chat)} • Μηνύματα/αρχεία φαίνονται μόνο στους χρήστες της συνομιλίας • Ήχος: ${soundEnabled ? 'ON' : 'OFF'}`; }
-  else { els.syncHint.textContent = 'Τοπικό demo στη συσκευή • Άνοιξε το online link για επικοινωνία σε πραγματικό χρόνο.'; }
+  if(serverMode){ els.syncHint.textContent = tr('sync_online', { access: accessLabel(chat), sound: soundEnabled ? tr('state_on') : tr('state_off') }); }
+  else { els.syncHint.textContent = tr('sync_local'); }
 }
-function startSyncLoop(){ clearInterval(syncTimer); syncTimer = setInterval(fetchServerState, 1400); }
+function startSyncLoop(){ clearInterval(syncTimer); syncTimer = setInterval(syncTick, 1400); }
+async function syncTick(){ await flushOutbox(); await fetchServerState(); }
 // One mutation = one op. The server appends atomically, so two people sending at once never overwrite each other.
 async function sendOp(op){
   if(!serverMode) return null;
@@ -474,7 +519,24 @@ async function sendOp(op){
     const res = await fetch('/api/op', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ op }) });
     if(!res.ok) throw new Error('op failed');
     return await res.json();
-  }catch(e){ showToast('Δεν στάλθηκε. Έλεγξε τη σύνδεση και ξαναδοκίμασε.'); return null; }
+  }catch(e){ return null; }
+}
+// Reliable variant for data-bearing ops: if the send fails, keep it in an outbox and retry every tick.
+async function sendOpQ(op){
+  const res = await sendOp(op);
+  if(!res){ queueOutbox(op); showToast(tr('t_op_failed')); }
+  return res;
+}
+function queueOutbox(op){ if(op && op.type){ outbox.push(op); if(outbox.length > 200) outbox.shift(); } }
+function msgOnServer(id){ return allMessagesFrom(state).some(m => m.id === id); }
+async function flushOutbox(){
+  if(!serverMode || !outbox.length) return;
+  const pending = outbox; outbox = [];
+  for(const op of pending){
+    if(op.type === 'message' && op.message && msgOnServer(op.message.id)) continue; // already delivered
+    const res = await sendOp(op);
+    if(!res) outbox.push(op); // still failing — try again next tick
+  }
 }
 function scheduleMarkRead(chatId){
   if(!serverMode || !profile || !chatId) return;
@@ -498,17 +560,95 @@ async function fetchServerState(){
     state = incomingState; state.activeChatId = localActive;
     serverRevision = data.revision || 0; localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); ensureActiveChatVisible(); renderAll();
     const visibleNew = newForeignMessages.filter(m => visibleChats().some(c => (state.messages[c.id] || []).some(x => x.id === m.id)));
-    if(bootCompleted && visibleNew.length){ playNotificationSound(); showToast(`Νέο μήνυμα από ${visibleNew[0].senderName}.`); }
+    if(bootCompleted && visibleNew.length){ playNotificationSound(); showToast(tr('t_new_message', { name: visibleNew[0].senderName })); }
     rememberKnownMessages();
-  }catch(e){ serverMode = false; clearInterval(syncTimer); updateSyncUI(); showToast('Η live σύνδεση χάθηκε. Γύρισε σε τοπικό demo.'); }
+  }catch(e){ serverMode = false; clearInterval(syncTimer); updateSyncUI(); showToast(tr('t_live_lost')); }
 }
 function allMessagesFrom(st){ const out = []; Object.values(st.messages || {}).forEach(list => (list || []).forEach(m => out.push(m))); return out; }
 function rememberKnownMessages(){ knownMessageIds = new Set(allMessagesFrom(state).map(m => m.id)); }
 function findNewForeignMessages(nextState){ return allMessagesFrom(nextState).filter(m => !knownMessageIds.has(m.id) && (!profile || m.senderId !== profile.memberId)); }
 function enableSound(){ soundEnabled = true; localStorage.setItem(SOUND_KEY, '1'); try{ audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if(audioCtx.state === 'suspended') audioCtx.resume(); }catch(e){} updateSoundUI(); }
-function toggleSound(){ if(!soundEnabled){ enableSound(); playNotificationSound(); showToast('Ο ήχος ειδοποίησης ενεργοποιήθηκε.'); }else{ soundEnabled = false; localStorage.setItem(SOUND_KEY, '0'); updateSoundUI(); showToast('Ο ήχος ειδοποίησης έκλεισε.'); } }
-function updateSoundUI(){ if(els.soundBtn){ els.soundBtn.textContent = soundEnabled ? '🔔 Ήχος ON' : '🔕 Ήχος OFF'; els.soundBtn.classList.toggle('active-sound', soundEnabled); } }
+function toggleSound(){ if(!soundEnabled){ enableSound(); playNotificationSound(); showToast(tr('t_sound_on')); }else{ soundEnabled = false; localStorage.setItem(SOUND_KEY, '0'); updateSoundUI(); showToast(tr('t_sound_off')); } }
+function updateSoundUI(){ if(els.soundBtn){ els.soundBtn.textContent = soundEnabled ? '🔔' : '🔕'; els.soundBtn.title = tr('sound_label') + ': ' + (soundEnabled ? tr('state_on') : tr('state_off')); els.soundBtn.classList.toggle('active-sound', soundEnabled); } }
 function playNotificationSound(){ if(!soundEnabled) return; try{ audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if(audioCtx.state === 'suspended') audioCtx.resume(); const t = audioCtx.currentTime; beep(t, 660, 0.09, 0.055); beep(t + 0.12, 880, 0.11, 0.045); }catch(e){} }
 function beep(start, freq, duration, volume){ const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(freq, start); gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(volume, start + 0.015); gain.gain.exponentialRampToValueAtTime(0.0001, start + duration); osc.connect(gain); gain.connect(audioCtx.destination); osc.start(start); osc.stop(start + duration + 0.02); }
+
+// ---- Invite / Share: one permanent link, sent with the native share sheet (mobile) or clipboard ----
+function appLink(){ return location.origin + location.pathname.replace(/[^/]*$/, ''); }
+async function inviteShare(){
+  if(location.protocol === 'file:'){ return showToast(tr('sync_local')); }
+  const link = appLink();
+  const msg = tr('invite_message') + '\n' + link;
+  if(navigator.share){
+    try{ await navigator.share({ title: tr('invite_title'), text: tr('invite_message'), url: link }); return; }
+    catch(e){ if(e && e.name === 'AbortError') return; }
+  }
+  try{ await navigator.clipboard.writeText(msg); showToast(tr('invite_copied')); }
+  catch(e){ try{ window.prompt(tr('invite_copied'), link); }catch(_){} }
+}
+
+// ---- Control Room: admin-only command center (laptop/desktop) ----
+function openControlRoom(){
+  if(!isAdmin()) return showToast(tr('cr_only_admin'));
+  renderControlRoom();
+  openModal(els.controlRoomModal);
+}
+function lastActivity(chat){
+  const msgs = state.messages[chat.id] || [];
+  const last = msgs[msgs.length - 1];
+  return last ? formatTime(last.time) : '—';
+}
+function renderControlRoom(){
+  if(!els.controlRoomModal) return;
+  const onlineCount = state.members.filter(m => m.online).length;
+  const msgCount = allMessagesFrom(state).length;
+  const files = collectFiles();
+  const kpis = [
+    { v: state.chats.length, k:'cr_kpi_convos' },
+    { v: onlineCount + '/' + state.members.length, k:'cr_kpi_staff' },
+    { v: msgCount, k:'cr_kpi_messages' },
+    { v: files.length, k:'cr_kpi_files' }
+  ];
+  els.crKpis.innerHTML = kpis.map(x => `<div class="cr-kpi"><div class="cr-kpi-val">${escapeHTML(String(x.v))}</div><div class="cr-kpi-lbl">${escapeHTML(tr(x.k))}</div></div>`).join('');
+
+  els.crConvos.innerHTML = state.chats.map(chat => {
+    const unread = unreadCount(chat);
+    return `<button class="cr-row" data-cr-chat="${chat.id}">
+      <div class="avatar small">${escapeHTML(chat.color || initials(chat.name))}</div>
+      <div class="cr-row-copy">
+        <div class="cr-row-title">${chat.locked ? '🔒 ' : ''}${escapeHTML(chat.name)}</div>
+        <div class="cr-row-sub">${chatTypeLabel(chat)} • ${accessLabel(chat)} • ${chat.memberIds?.length || 0} ${tr('members_word')} • ${tr('cr_last')}: ${lastActivity(chat)}</div>
+      </div>
+      ${unread ? `<span class="badge">${unread}</span>` : ''}
+    </button>`;
+  }).join('');
+  els.crConvos.querySelectorAll('[data-cr-chat]').forEach(btn => btn.addEventListener('click', () => {
+    state.activeChatId = btn.dataset.crChat; markChatRead(state.activeChatId); scheduleMarkRead(state.activeChatId);
+    closeModals(); setTab('chats'); saveState(); renderAll();
+  }));
+
+  els.crStaff.innerHTML = state.members.map(m => `<div class="cr-row static">
+    <div class="avatar small">${escapeHTML(initials(m.name))}</div>
+    <div class="cr-row-copy">
+      <div class="cr-row-title">${escapeHTML(m.name)}</div>
+      <div class="cr-row-sub">${escapeHTML(m.role || '')}${m.team ? ' • ' + escapeHTML(m.team) : ''}</div>
+    </div>
+    <span class="cr-pill ${m.online ? 'on' : 'off'}">${m.online ? tr('cr_online') : tr('cr_offline')}</span>
+    ${profile && m.id !== profile.memberId ? `<button class="mini-btn" data-cr-dm="${m.id}">${tr('msg_btn')}</button>` : ''}
+  </div>`).join('');
+  els.crStaff.querySelectorAll('[data-cr-dm]').forEach(btn => btn.addEventListener('click', () => { closeModals(); openPrivateChat(btn.dataset.crDm); }));
+
+  els.crFiles.innerHTML = files.slice(0, 16).map(f => {
+    const img = (f.type||'').startsWith('image/') ? safeImg(f.data) : '';
+    const dl = safeDataUrl(f.data);
+    return `<div class="cr-row static">
+    ${img ? `<img class="attachment-thumb tiny" src="${img}" alt="${escapeHTML(f.name)}" />` : `<div class="attachment-icon small">${fileIcon(f.name)}</div>`}
+    <div class="cr-row-copy">
+      <div class="cr-row-title">${escapeHTML(f.name)}</div>
+      <div class="cr-row-sub">${f.locked ? '🔒 ' : ''}${escapeHTML(f.chatName)} • ${escapeHTML(f.senderName)} • ${fileSize(f.size || 0)}</div>
+    </div>
+    ${dl ? `<a class="mini-btn" href="${dl}" download="${escapeHTML(f.name)}">${tr('download')}</a>` : ''}
+  </div>`; }).join('') || `<div class="empty-state">${tr('cr_no_files')}</div>`;
+}
 
 boot();

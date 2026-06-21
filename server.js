@@ -68,12 +68,32 @@ let state = loadState();
 const MAX_TEXT = 4000;
 const MAX_ATTACHMENTS = 8;
 const MAX_ATT_DATA = 8 * 1024 * 1024; // ~8MB per attachment (base64 string length)
+// Only accept well-formed base64 data: URLs — anything else is dropped (prevents stored XSS via attachment data).
+const DATA_URL_RE = /^data:[a-z0-9.+-]+\/[a-z0-9.+-]+(?:;[a-z0-9-]+=[^;,]+)*;base64,[A-Za-z0-9+/=\s]+$/i;
+const ACCESS_ENUM = ['all','members','locked','private'];
+
+function sanitizeChat(c){
+  if(!c || typeof c !== 'object') return null;
+  const type = c.type === 'dm' ? 'dm' : 'group';
+  const access = ACCESS_ENUM.indexOf(c.access) >= 0 ? c.access : (type === 'dm' ? 'private' : 'members');
+  const id = String(c.id || '').slice(0, 120);
+  if(!id) return null;
+  return {
+    id, type, access,
+    name: String(c.name || '').slice(0, 120),
+    description: String(c.description || '').slice(0, 400),
+    color: String(c.color || '').slice(0, 8),
+    memberIds: Array.isArray(c.memberIds) ? c.memberIds.map(x => String(x).slice(0,120)).slice(0,200) : [],
+    unread: 0,
+    locked: !!c.locked
+  };
+}
 
 function sanitizeMessage(m){
   const text = typeof m.text === 'string' ? m.text.slice(0, MAX_TEXT) : '';
   let attachments = Array.isArray(m.attachments) ? m.attachments.slice(0, MAX_ATTACHMENTS) : [];
   attachments = attachments
-    .filter(a => a && typeof a.data === 'string' && a.data.length <= MAX_ATT_DATA)
+    .filter(a => a && typeof a.data === 'string' && a.data.length <= MAX_ATT_DATA && DATA_URL_RE.test(a.data))
     .map(a => ({ id:String(a.id||'').slice(0,80), name:String(a.name||'file').slice(0,200), type:String(a.type||'application/octet-stream').slice(0,120), size:Number(a.size)||0, data:a.data }));
   return {
     id: String(m.id||'').slice(0,120),
@@ -118,7 +138,7 @@ function applyOp(op){
       return {};
     }
     case 'group': {
-      const chat = op.chat;
+      const chat = sanitizeChat(op.chat);
       if(!chat || !chat.id) throw new Error('bad group');
       if(!state.chats.some(c => c.id === chat.id)) state.chats.unshift(chat);
       if(!state.messages[chat.id]) state.messages[chat.id] = [];
@@ -129,7 +149,7 @@ function applyOp(op){
       return {};
     }
     case 'dm': {
-      const chat = op.chat;
+      const chat = sanitizeChat(op.chat);
       if(chat && chat.id && !state.chats.some(c => c.id === chat.id)){
         state.chats.unshift(chat);
         if(!state.messages[chat.id]) state.messages[chat.id] = [];
@@ -138,7 +158,12 @@ function applyOp(op){
       return {};
     }
     case 'member': {
-      const member = op.member;
+      const mm = op.member;
+      const member = (mm && typeof mm === 'object' && mm.id) ? {
+        id:String(mm.id).slice(0,120), name:String(mm.name||'').slice(0,80), role:String(mm.role||'').slice(0,80),
+        phone:String(mm.phone||'').slice(0,40), team:String(mm.team||'').slice(0,80), online:!!mm.online,
+        permissions: Array.isArray(mm.permissions) ? mm.permissions.map(x=>String(x).slice(0,40)).slice(0,12) : ['staff']
+      } : null;
       if(member && member.id && !state.members.some(m => m.id === member.id)){
         state.members.push(member);
         const gen = state.chats.find(c => c.id === 'general');
@@ -206,8 +231,10 @@ const server = http.createServer(async (req,res)=>{
     if(url.pathname === '/api/reset' && req.method === 'POST'){
       state = defaultState(); saveState(); return sendJson(res, 200, {ok:true, revision, state});
     }
-    let filePath = path.normalize(path.join(ROOT, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname)));
-    if(!filePath.startsWith(ROOT)) { res.writeHead(403); return res.end('Forbidden'); }
+    const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname);
+    if(rel.indexOf('..') >= 0 || rel.indexOf('\0') >= 0 || rel.indexOf('\\') >= 0) { res.writeHead(403); return res.end('Forbidden'); }
+    let filePath = path.normalize(path.join(ROOT, rel));
+    if(filePath !== ROOT && !filePath.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end('Forbidden'); }
     fs.readFile(filePath, (err, data)=>{
       if(err){ res.writeHead(404, {'Content-Type':'text/plain; charset=utf-8'}); return res.end('Not found'); }
       const noCache = /\.(html|js|css|webmanifest)$/i.test(filePath);

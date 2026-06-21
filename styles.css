@@ -91,6 +91,48 @@ button{cursor:pointer}
 
 .sound-toggle.active-sound{background:linear-gradient(135deg,rgba(255,62,165,.30),rgba(255,23,68,.24));border-color:rgba(255,117,199,.62);box-shadow:0 0 22px rgba(255,62,165,.16)}
 .empty-state{padding:16px;color:var(--muted);text-align:center;border:1px dashed rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.035)}
+
+/* language switcher */
+.brandbar-copy{flex:1;min-width:0}
+.lang-switch{display:flex;gap:4px;flex:0 0 auto}
+.lang-btn{padding:6px 9px;font-size:12px;font-weight:800;color:var(--muted);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;min-width:38px}
+.lang-btn.active{color:white;background:linear-gradient(135deg,rgba(255,62,165,.30),rgba(255,23,68,.22));border-color:rgba(255,117,199,.55)}
+.login-lang{justify-content:center;margin-bottom:12px}
+
+/* side actions: invite / control room */
+.side-actions{display:flex;gap:8px;padding:0 14px 12px}
+.side-actions .ghost-btn.wide{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 8px;font-size:13px;font-weight:800;color:white}
+#controlRoomBtn{background:linear-gradient(135deg,rgba(255,62,165,.20),rgba(255,23,68,.16));border-color:rgba(255,117,199,.42)}
+
+/* control room */
+.control-room-card{width:min(1080px,100%);max-height:92vh;overflow:auto;text-align:left}
+.cr-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding-right:40px}
+.cr-title{display:flex;align-items:center;gap:8px;margin:0;font-size:22px}
+.cr-subtitle{color:var(--muted);font-size:13px;margin-top:4px}
+.cr-actions{display:flex;gap:8px;flex-wrap:wrap}
+.cr-actions .ghost-btn{display:inline-flex}
+.cr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.cr-kpi{padding:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:18px;text-align:center}
+.cr-kpi-val{font-size:26px;font-weight:900;color:white}
+.cr-kpi-lbl{font-size:12px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
+.cr-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:14px}
+.cr-panel{border:1px solid var(--line);background:rgba(255,255,255,.035);border-radius:18px;padding:12px;min-height:120px}
+.cr-list{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto}
+.cr-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px;border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:14px}
+button.cr-row{cursor:pointer;transition:.16s ease;color:var(--text)}
+button.cr-row:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
+.cr-row.static{cursor:default}
+.cr-row-copy{min-width:0;flex:1}
+.cr-row-title{font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cr-row-sub{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.cr-pill{font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;flex:0 0 auto}
+.cr-pill.on{background:rgba(55,255,156,.16);color:var(--green);border:1px solid rgba(55,255,156,.4)}
+.cr-pill.off{background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--line)}
+.avatar.small{width:34px;height:34px;border-radius:12px;font-size:13px}
+.attachment-thumb.tiny{width:34px;height:34px;border-radius:10px;object-fit:cover;flex:0 0 auto}
+.attachment-icon.small{width:34px;height:34px;border-radius:10px;font-size:13px;display:grid;place-items:center;background:rgba(255,255,255,.12);flex:0 0 auto}
+@media (max-width: 920px){.cr-grid{grid-template-columns:1fr}.cr-kpis{grid-template-columns:repeat(2,1fr)}.control-room-card{max-height:88dvh}}
+@media (max-width: 820px){.side-actions .ghost-btn.wide{display:inline-flex}}
 .empty-state.center{align-self:center;margin:auto}
 
 /* V4 private roles additions — keeps the same dark/pink/red design */
