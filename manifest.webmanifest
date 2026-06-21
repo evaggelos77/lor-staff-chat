@@ -1,0 +1,18 @@
+{
+  "name": "LOR. Staff Chat V4",
+  "short_name": "LOR Staff",
+  "description": "Private roles staff messenger with files and notification sound",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#050006",
+  "theme_color": "#ff3ea5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/lor-staff-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

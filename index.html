@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>LOR Staff Chat</title>
+  <meta name="theme-color" content="#050006" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/lor-staff-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <aside class="sidebar" id="sidebar">
+      <header class="brandbar">
+        <div class="logo-mark">L</div>
+        <div>
+          <div class="brand-name">LOR STAFF CHAT</div>
+          <div class="brand-sub">Private roles messenger</div>
+        </div>
+      </header>
+
+      <section class="profile-card" id="profileCard">
+        <div class="avatar big" id="profileAvatar">EV</div>
+        <div class="profile-copy">
+          <div class="profile-name" id="profileName">Demo Admin</div>
+          <div class="profile-role" id="profileRole">Διαχειριστής</div>
+        </div>
+        <button class="icon-btn" id="settingsBtn" title="Ρυθμίσεις">⚙</button>
+      </section>
+
+      <div class="quick-actions">
+        <button class="pill-btn active" data-tab="chats">Συνομιλίες</button>
+        <button class="pill-btn" data-tab="staff">Προσωπικό</button>
+        <button class="pill-btn" data-tab="files">Αρχεία</button>
+      </div>
+
+      <div class="search-wrap">
+        <span>⌕</span>
+        <input id="searchInput" type="search" placeholder="Αναζήτηση ονόματος ή ομάδας" />
+      </div>
+
+      <section class="list-panel" id="chatListPanel">
+        <div class="section-title">
+          <span>Ενεργές συνομιλίες</span>
+          <button class="mini-btn" id="newGroupBtn">+ Ομάδα</button>
+        </div>
+        <div class="chat-list" id="chatList"></div>
+      </section>
+
+      <section class="list-panel hidden" id="staffPanel">
+        <div class="section-title">
+          <span>Ονόματα προσωπικού</span>
+          <button class="mini-btn" id="addMemberBtn">+ Άτομο</button>
+        </div>
+        <div class="staff-list" id="staffList"></div>
+      </section>
+
+      <section class="list-panel hidden" id="filesPanel">
+        <div class="section-title">
+          <span>Φωτογραφίες / Αρχεία</span>
+          <button class="mini-btn" id="exportBtn">Export</button>
+        </div>
+        <div class="file-list" id="fileList"></div>
+      </section>
+    </aside>
+
+    <main class="chat-stage">
+      <header class="chat-header">
+        <button class="mobile-only icon-btn" id="mobileMenuBtn">☰</button>
+        <div class="chat-title-wrap">
+          <div class="avatar" id="activeChatAvatar">G</div>
+          <div>
+            <h1 id="activeChatName">Γενική Ομάδα</h1>
+            <p id="activeChatMeta">6 μέλη • online demo</p>
+          </div>
+        </div>
+        <div class="chat-header-actions">
+          <button class="ghost-btn sound-toggle" id="soundBtn">🔔 Ήχος</button>
+          <button class="ghost-btn" id="announceBtn">Ανακοίνωση</button>
+          <button class="icon-btn" id="infoBtn">ⓘ</button>
+        </div>
+      </header>
+
+      <section class="notice-card" id="noticeCard">
+        <div>
+          <strong>Καρφιτσωμένη οδηγία</strong>
+          <p id="pinnedNotice">Όλοι οι υπάλληλοι ανεβάζουν φωτογραφίες/αρχεία μέσα στη σωστή ομάδα του event.</p>
+        </div>
+        <span class="hot-dot"></span>
+      </section>
+
+      <section class="messages" id="messages"></section>
+
+      <footer class="composer">
+        <div class="attachment-preview hidden" id="attachmentPreview"></div>
+        <div class="composer-row">
+          <label class="attach-btn" title="Ανέβασμα φωτογραφίας ή αρχείου">
+            <input id="fileInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" />
+            📎
+          </label>
+          <label class="attach-btn mobile-cam" title="Κάμερα κινητού">
+            <input id="cameraInput" type="file" accept="image/*" capture="environment" />
+            📷
+          </label>
+          <textarea id="messageInput" rows="1" placeholder="Γράψε μήνυμα..."></textarea>
+          <button class="send-btn" id="sendBtn">➤</button>
+        </div>
+        <div class="composer-hint" id="syncHint">Σύνδεση σε εξέλιξη…</div>
+      </footer>
+    </main>
+
+    <aside class="details-panel" id="detailsPanel">
+      <div class="details-card">
+        <div class="section-title"><span>Στοιχεία ομάδας</span></div>
+        <div class="detail-row"><span>Ομάδα</span><strong id="detailChatName">Γενική Ομάδα</strong></div>
+        <div class="detail-row"><span>Τύπος</span><strong id="detailChatType">Group</strong></div>
+        <div class="detail-row"><span>Μέλη</span><strong id="detailMembers">6</strong></div>
+        <div class="detail-row"><span>Αρχεία</span><strong id="detailFiles">0</strong></div>
+        <div class="detail-row"><span>Πρόσβαση</span><strong id="detailAccess">Μόνο μέλη</strong></div>
+        <div class="detail-row stacked"><span>Ποιοι το βλέπουν</span><strong id="detailAllowed">Επιλεγμένα μέλη</strong></div>
+      </div>
+
+      <div class="details-card">
+        <div class="section-title"><span>Γρήγορες λειτουργίες</span></div>
+        <button class="wide-btn" id="demoReplyBtn">Δοκιμαστική απάντηση υπαλλήλου</button>
+        <button class="wide-btn" id="testSoundBtn">Δοκιμή ήχου ειδοποίησης</button>
+        <button class="wide-btn" id="clearDemoBtn">Καθαρισμός demo</button>
+        <button class="wide-btn danger" id="logoutBtn">Αλλαγή χρήστη</button>
+      </div>
+
+      <div class="details-card small-copy">
+        <strong>Online επικοινωνία σε πραγματικό χρόνο</strong>
+        <p>Ανοίξτε το ίδιο link από διαφορετικές πόλεις/συσκευές και μπείτε με διαφορετικά ονόματα. Κάθε χρήστης βλέπει μόνο τις συνομιλίες που τον αφορούν — η Μαρία δεν βλέπει τα Οικονομικά, ο Παναγιώτης ναι.</p>
+      </div>
+    </aside>
+  </div>
+
+  <nav class="mobile-nav">
+    <button data-tab="chats" class="active">💬<span>Chat</span></button>
+    <button data-tab="staff">👥<span>Ονόματα</span></button>
+    <button data-tab="files">📎<span>Αρχεία</span></button>
+  </nav>
+
+  <div class="modal hidden" id="loginModal" role="dialog" aria-modal="true">
+    <div class="modal-card login-card">
+      <div class="logo-mark huge">L</div>
+      <h2>LOR STAFF CHAT</h2>
+      <p>Εσωτερική εφαρμογή μηνυμάτων προσωπικού για events, ομάδες, αρχεία και άμεση επικοινωνία — online σε πραγματικό χρόνο, με ιδιωτικές συνομιλίες, ομάδες, δικαιώματα και ήχο ειδοποίησης.</p>
+      <div class="form-grid">
+        <label>Όνομα χρήστη<input id="loginName" type="text" placeholder="π.χ. Ευάγγελος" /></label>
+        <label>Ρόλος<input id="loginRole" type="text" placeholder="π.χ. Admin / Υπεύθυνος / Υπάλληλος" /></label>
+      </div>
+      <button class="primary-btn" id="loginBtn">Μπες στο demo</button>
+      <button class="link-btn" id="demoLoginBtn">Γρήγορη είσοδος ως Admin / Ευάγγελος</button>
+      <button class="link-btn" id="annaLoginBtn">Test ως Άννα</button>
+      <button class="link-btn" id="mariaLoginBtn">Test ως Μαρία</button>
+      <button class="link-btn" id="panagiotisLoginBtn">Test ως Παναγιώτης / Οικονομικά</button>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="memberModal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button class="close-btn" data-close>×</button>
+      <h2>Νέο άτομο προσωπικού</h2>
+      <div class="form-grid">
+        <label>Όνομα<input id="memberName" type="text" placeholder="Ονοματεπώνυμο" /></label>
+        <label>Ρόλος<input id="memberRole" type="text" placeholder="Υπεύθυνος, Hostess, Τεχνικός..." /></label>
+        <label>Τηλέφωνο<input id="memberPhone" type="tel" placeholder="προαιρετικό" /></label>
+        <label>Ομάδα<input id="memberTeam" type="text" placeholder="Event, Bar, Stage, Security..." /></label>
+      </div>
+      <button class="primary-btn" id="saveMemberBtn">Αποθήκευση ονόματος</button>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="groupModal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button class="close-btn" data-close>×</button>
+      <h2>Νέα ομάδα συνομιλίας</h2>
+      <div class="form-grid">
+        <label>Όνομα ομάδας<input id="groupName" type="text" placeholder="π.χ. Event Αθήνα / Εξοπλισμός" /></label>
+        <label>Περιγραφή<input id="groupDescription" type="text" placeholder="Σύντομη περιγραφή" /></label>
+      </div>
+      <label>Πρόσβαση ομάδας<select id="groupAccess"><option value="members">Μόνο επιλεγμένα μέλη</option><option value="locked">Κλειδωμένη / ευαίσθητη ομάδα</option><option value="all">Όλοι οι χρήστες</option></select></label>
+      <div class="member-picker-title">Επίλεξε μέλη που θα βλέπουν την ομάδα</div>
+      <div class="member-picker" id="memberPicker"></div>
+      <button class="primary-btn" id="saveGroupBtn">Δημιουργία ομάδας με δικαιώματα</button>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="announceModal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button class="close-btn" data-close>×</button>
+      <h2>Νέα ανακοίνωση</h2>
+      <label>Κείμενο ανακοίνωσης<textarea id="announceText" rows="4" placeholder="Γράψε οδηγία για την ομάδα..."></textarea></label>
+      <button class="primary-btn" id="saveAnnounceBtn">Καρφίτσωμα ανακοίνωσης</button>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

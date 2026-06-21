@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: lor-staff-chat
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/revision
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

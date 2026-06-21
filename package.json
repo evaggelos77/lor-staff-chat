@@ -1,0 +1,13 @@
+{
+  "name": "lor-staff-chat",
+  "version": "5.0.0",
+  "description": "LOR Staff Chat — online private-roles staff messenger (groups, DMs, permissions, files, notification sound)",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

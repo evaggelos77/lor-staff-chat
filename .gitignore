@@ -1,0 +1,4 @@
+node_modules/
+lor_staff_chat_live_data.json
+*.log
+.DS_Store
